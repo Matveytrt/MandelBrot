@@ -35,10 +35,10 @@ int main()
 
 void DrawFractal(int wdth, int hght, int max_iter)
 {
-
-    float x_min = -2.0, x_max = 2.0;
-    float y_min = -1.5, y_max = 1.5;
-    float lmax = 10.0;
+    
+    float x_min = -2.0f, x_max = 2.0f;
+    float y_min = -1.5f, y_max = 1.5f;
+    float lmax = 4.0;
 
     float scale_coef = 1.1;
     float mov_coef = 0.1;
@@ -84,9 +84,9 @@ void DrawFractal(int wdth, int hght, int max_iter)
         if(IsKeyDown(KEY_MINUS)) {  dx *= scale_coef; x_max = x0 + dx; x_min = x0 - dx;
                                     dy *= scale_coef; y_max = y0 + dy; y_min = y0 - dy; }
 
-        if(IsKeyDown(KEY_W))     {  y0 += mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
+        if(IsKeyDown(KEY_W))     {  y0 -= mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
         if(IsKeyDown(KEY_A))     {  x0 -= mov_coef; x_max = x0 + dx; x_min = x0 - dx; } 
-        if(IsKeyDown(KEY_S))     {  y0 -= mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
+        if(IsKeyDown(KEY_S))     {  y0 += mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
         if(IsKeyDown(KEY_D))     {  x0 += mov_coef; x_max = x0 + dx; x_min = x0 - dx; }
 
         for (int py = 0; py < hght; py++) 
@@ -101,10 +101,10 @@ void DrawFractal(int wdth, int hght, int max_iter)
                 for (int idx = 0; idx < _STEP_; idx++) { cmp[idx] = 1; }
                 for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] = 0; }
                 
-                mask = 0;
-
+                
                 for (int iter = 0; iter < max_iter; iter++)
                 {
+                    mask = 0;
                     for (int idx = 0; idx < _STEP_; idx++) { x2[idx] =  zx[idx] * zx[idx]; }
                     for (int idx = 0; idx < _STEP_; idx++) { y2[idx] =  zy[idx] * zy[idx]; }
                     for (int idx = 0; idx < _STEP_; idx++) { xy[idx] =  zx[idx] * zy[idx]; }
@@ -113,7 +113,7 @@ void DrawFractal(int wdth, int hght, int max_iter)
                     for (int idx = 0; idx < _STEP_; idx++) { zy[idx] = 2 * xy[idx] + y; }
 
                     for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] += cmp[idx]; }
-
+                    
                     for (int idx = 0; idx < _STEP_; idx++) { if ((x2[idx] + y2[idx]) > l2max) { cmp[idx] = 0; } }
 
                     for (int idx = 0; idx < _STEP_; idx++) { mask |= (cmp[idx] << idx);}
