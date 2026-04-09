@@ -7,10 +7,13 @@
 #define _MAX_ITER_    255
 #define _WINDOW_WDTH_ 800
 #define _WINDOW_HGHT_ 600
+#define _CMP_MASK_    0b1111
+#define _STEP_        4
 
 typedef unsigned char byte;
 
 //g++ -o mndlbrt mandelbrot.cpp -lraylib
+// to do AOS
 
 void DrawFractal(int wdth, int hght, int max_iter);
 
@@ -33,8 +36,8 @@ int main()
 void DrawFractal(int wdth, int hght, int max_iter)
 {
 
-    float x_min = -2.0f, x_max = 2.0f;
-    float y_min = -1.5f, y_max = 1.5f;
+    float x_min = -2.0, x_max = 2.0;
+    float y_min = -1.5, y_max = 1.5;
     float lmax = 10.0;
 
     float scale_coef = 1.1;
@@ -44,14 +47,22 @@ void DrawFractal(int wdth, int hght, int max_iter)
     float dx = (x_max - x_min) / 2, dy = (y_max - y_min) / 2; 
     float x0 = (x_max + x_min) / 2, y0 = (y_max + y_min) / 2; 
 
-    float x = 0, y = 0;
-    byte iter = 0;
+    float x[_STEP_] = {};
+
+    float zx[_STEP_] = {};
+    float zy[_STEP_] = {};
+    float x2[_STEP_] = {};
+    float y2[_STEP_] = {};
+    float xy[_STEP_] = {};
+
+    int iter_data[_STEP_] = {};
+    int cmp[_STEP_] = {};
+    int mask = 0;
+
     int size = wdth * hght;
 
     Color *clr_data = (Color *) calloc(size, sizeof(Color));
     assert(clr_data);
-
-    Texture2D texture = {};
 
     Image image =   {
                         clr_data,
@@ -61,10 +72,10 @@ void DrawFractal(int wdth, int hght, int max_iter)
                         PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 
                     };
 
+    Texture2D texture = LoadTextureFromImage(image);
+
     while (!WindowShouldClose())
     {
-        BeginDrawing();
-        ClearBackground(WHITE);
         int index = 0;
 
         if(IsKeyDown(KEY_EQUAL)) {  dx /= scale_coef; x_max = x0 + dx; x_min = x0 - dx;
@@ -74,46 +85,60 @@ void DrawFractal(int wdth, int hght, int max_iter)
                                     dy *= scale_coef; y_max = y0 + dy; y_min = y0 - dy; }
 
         if(IsKeyDown(KEY_W))     {  y0 += mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
-        if(IsKeyDown(KEY_A))     {  x0 += mov_coef; x_max = x0 + dx; x_min = x0 - dx; }
+        if(IsKeyDown(KEY_A))     {  x0 -= mov_coef; x_max = x0 + dx; x_min = x0 - dx; } 
         if(IsKeyDown(KEY_S))     {  y0 -= mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
-        if(IsKeyDown(KEY_D))     {  x0 -= mov_coef; x_max = x0 + dx; x_min = x0 - dx; } 
+        if(IsKeyDown(KEY_D))     {  x0 += mov_coef; x_max = x0 + dx; x_min = x0 - dx; }
 
         for (int py = 0; py < hght; py++) 
         {
-            y = y_min + (y_max - y_min) * ((float) py / hght);
+            float y = y_min + (y_max - y_min) * (((float) py) / hght);
 
-            for (int px = 0; px < wdth; px++) 
+            for (int px = 0; px < wdth; px += _STEP_) 
             {
-                x = x_min + (x_max - x_min) * ((float) px / wdth);
-
-                float zx = x, zy = y;
+                for (int idx = 0; idx < _STEP_; idx++) { x[idx] = x_min + (x_max - x_min) * (((float) px + idx) / wdth); }
+                for (int idx = 0; idx < _STEP_; idx++) { zx[idx] = x[idx]; }
+                for (int idx = 0; idx < _STEP_; idx++) { zy[idx] = y; }
+                for (int idx = 0; idx < _STEP_; idx++) { cmp[idx] = 1; }
+                for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] = 0; }
                 
-                for (iter = 0; iter < max_iter; iter++) 
+                mask = 0;
+
+                for (int iter = 0; iter < max_iter; iter++)
                 {
-                    float x2 = zx * zx;
-                    float y2 = zy * zy;
+                    for (int idx = 0; idx < _STEP_; idx++) { x2[idx] =  zx[idx] * zx[idx]; }
+                    for (int idx = 0; idx < _STEP_; idx++) { y2[idx] =  zy[idx] * zy[idx]; }
+                    for (int idx = 0; idx < _STEP_; idx++) { xy[idx] =  zx[idx] * zy[idx]; }
 
-                    float xy = zx * zy;
-                    
-                    zx = x2 - y2 + x;
-                    zy = 2 * xy + y;
+                    for (int idx = 0; idx < _STEP_; idx++) { zx[idx] = x2[idx] - y2[idx] + x[idx]; }
+                    for (int idx = 0; idx < _STEP_; idx++) { zy[idx] = 2 * xy[idx] + y; }
 
-                    if ((x2 + y2) > l2max) {break;}
+                    for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] += cmp[idx]; }
+
+                    for (int idx = 0; idx < _STEP_; idx++) { if ((x2[idx] + y2[idx]) > l2max) { cmp[idx] = 0; } }
+
+                    for (int idx = 0; idx < _STEP_; idx++) { mask |= (cmp[idx] << idx);}
+
+                    if (mask == 0) { break; }
                 }
 
-                if (iter == max_iter) {clr_data[index++] = BLACK;}
-    
-                else    
-                {
-                    byte r = iter + 255;
-                    byte g = iter + 255;
-                    byte b = iter + 255;
-                    clr_data[index++] = {r, g, b, 255};
+                for (int idx = 0; idx < _STEP_; idx++) 
+                { 
+                    if (iter_data[idx] == max_iter) {clr_data[index++] = BLACK;}
+        
+                    else    
+                    {
+                        byte r = iter_data[idx] + 255;
+                        byte g = iter_data[idx] + 255;
+                        byte b = iter_data[idx] + 255;
+                        clr_data[index++] = {r, g, b, 255};
+                    }
                 }
             }
         }
 
-        texture = LoadTextureFromImage(image);
+        BeginDrawing();
+        ClearBackground(WHITE);
+        UpdateTexture(texture, clr_data);
         DrawTexture(texture, 0, 0, WHITE);
         DrawFPS(10, 10); //to do rdtsc
         EndDrawing();
