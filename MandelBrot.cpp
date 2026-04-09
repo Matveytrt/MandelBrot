@@ -4,6 +4,11 @@
 #include <assert.h>
 #include <raylib.h>
 
+#include <xmmintrin.h>
+#include <emmintrin.h> 
+#include <immintrin.h> 
+// -mavx2
+
 #define _MAX_ITER_    255
 #define _WINDOW_WDTH_ 800
 #define _WINDOW_HGHT_ 600
@@ -43,21 +48,10 @@ void DrawFractal(int wdth, int hght, int max_iter)
     float scale_coef = 1.1;
     float mov_coef = 0.1;
 
-    float l2max = lmax * lmax;
+    __m128 l2max = _mm_set1_ps(lmax * lmax);
+
     float dx = (x_max - x_min) / 2, dy = (y_max - y_min) / 2; 
     float x0 = (x_max + x_min) / 2, y0 = (y_max + y_min) / 2; 
-
-    float x[_STEP_] = {};
-
-    float zx[_STEP_] = {};
-    float zy[_STEP_] = {};
-    float x2[_STEP_] = {};
-    float y2[_STEP_] = {};
-    float xy[_STEP_] = {};
-
-    int iter_data[_STEP_] = {};
-    int cmp[_STEP_] = {};
-    int mask = 0;
 
     int size = wdth * hght;
 
@@ -79,59 +73,72 @@ void DrawFractal(int wdth, int hght, int max_iter)
         int index = 0;
 
         if(IsKeyDown(KEY_EQUAL)) {  dx /= scale_coef; x_max = x0 + dx; x_min = x0 - dx;
-                                    dy /= scale_coef; y_max = y0 + dy; y_min = y0 - dy; }
+                                    dy /= scale_coef; y_max = y0 + dy; y_min = y0 - dy; 
+                                    mov_coef /= scale_coef; }
 
         if(IsKeyDown(KEY_MINUS)) {  dx *= scale_coef; x_max = x0 + dx; x_min = x0 - dx;
-                                    dy *= scale_coef; y_max = y0 + dy; y_min = y0 - dy; }
+                                    dy *= scale_coef; y_max = y0 + dy; y_min = y0 - dy; 
+                                    mov_coef *= scale_coef; }
 
         if(IsKeyDown(KEY_W))     {  y0 -= mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
         if(IsKeyDown(KEY_A))     {  x0 -= mov_coef; x_max = x0 + dx; x_min = x0 - dx; } 
         if(IsKeyDown(KEY_S))     {  y0 += mov_coef; y_max = y0 + dy; y_min = y0 - dy; }
         if(IsKeyDown(KEY_D))     {  x0 += mov_coef; x_max = x0 + dx; x_min = x0 - dx; }
 
+        float ax = (2 * dx) / wdth;
+        float ay = (2 * dy) / hght;
+
         for (int py = 0; py < hght; py++) 
         {
-            float y = y_min + (y_max - y_min) * (((float) py) / hght);
+            __m128 y = _mm_set1_ps(y_min + py * ay);
 
             for (int px = 0; px < wdth; px += _STEP_) 
             {
-                for (int idx = 0; idx < _STEP_; idx++) { x[idx] = x_min + (x_max - x_min) * (((float) px + idx) / wdth); }
-                for (int idx = 0; idx < _STEP_; idx++) { zx[idx] = x[idx]; }
-                for (int idx = 0; idx < _STEP_; idx++) { zy[idx] = y; }
-                for (int idx = 0; idx < _STEP_; idx++) { cmp[idx] = 1; }
-                for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] = 0; }
+                float x0_val = x_min + (px + 0) * ax;
+                float x1_val = x_min + (px + 1) * ax;
+                float x2_val = x_min + (px + 2) * ax;
+                float x3_val = x_min + (px + 3) * ax;
+                __m128 x = _mm_set_ps(x3_val, x2_val, x1_val, x0_val);
+
+                __m128 zx = x;
+                __m128 zy = y;
+                __m128 cmp = _mm_set1_ps(0xffffffff);
+                __m128i iter_data = _mm_set1_epi32(0);
                 
                 
                 for (int iter = 0; iter < max_iter; iter++)
                 {
-                    mask = 0;
-                    for (int idx = 0; idx < _STEP_; idx++) { x2[idx] =  zx[idx] * zx[idx]; }
-                    for (int idx = 0; idx < _STEP_; idx++) { y2[idx] =  zy[idx] * zy[idx]; }
-                    for (int idx = 0; idx < _STEP_; idx++) { xy[idx] =  zx[idx] * zy[idx]; }
+                    __m128 x2 = _mm_mul_ps(zx, zx);
+                    __m128 y2 = _mm_mul_ps(zy, zy);
+                    __m128 xy = _mm_mul_ps(zx, zy);
 
-                    for (int idx = 0; idx < _STEP_; idx++) { zx[idx] = x2[idx] - y2[idx] + x[idx]; }
-                    for (int idx = 0; idx < _STEP_; idx++) { zy[idx] = 2 * xy[idx] + y; }
+                    zx = _mm_add_ps(_mm_sub_ps(x2, y2), x);
+                    zy = _mm_add_ps(_mm_add_ps(xy, xy), y);
 
-                    for (int idx = 0; idx < _STEP_; idx++) { iter_data[idx] += cmp[idx]; }
+                    iter_data = _mm_sub_epi32(iter_data, _mm_castps_si128(cmp));
                     
-                    for (int idx = 0; idx < _STEP_; idx++) { if ((x2[idx] + y2[idx]) > l2max) { cmp[idx] = 0; } }
+                    __m128 r2 = _mm_add_ps(x2, y2);
+                    cmp = _mm_cmplt_ps(r2, l2max);
 
-                    for (int idx = 0; idx < _STEP_; idx++) { mask |= (cmp[idx] << idx);}
+                    int mask = _mm_movemask_ps(cmp) & 0xF;
 
                     if (mask == 0) { break; }
                 }
 
                 for (int idx = 0; idx < _STEP_; idx++) 
                 { 
-                    if (iter_data[idx] == max_iter) {clr_data[index++] = BLACK;}
+                    int iter = _mm_cvtsi128_si32(iter_data);
+                    iter_data = _mm_srli_si128(iter_data, 4);
+
+                    if (iter == max_iter) {clr_data[index++] = BLACK;}
         
                     else    
                     {
-                        byte r = iter_data[idx] + 255;
-                        byte g = iter_data[idx] + 255;
-                        byte b = iter_data[idx] + 255;
+                        byte r = iter + 255;
+                        byte g = iter + 255;
+                        byte b = iter + 255;
                         clr_data[index++] = {r, g, b, 255};
-                    }
+                    } 
                 }
             }
         }
